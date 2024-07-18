@@ -1,6 +1,8 @@
 'use server';
 
 import { sql } from '@vercel/postgres';
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 
@@ -15,6 +17,7 @@ const FormSchema = z.object({
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
 
+const UpdateInvoice = FormSchema.omit({ id: true, date: true });
 
 export const createInvoice = async (formData: FormData) => {
 
@@ -32,10 +35,43 @@ export const createInvoice = async (formData: FormData) => {
 
     // sql to insert into table
     await sql`
-        INSERT INTO customer (custmer_id, amount, status, date)
+        INSERT INTO invoices (customer_id, amount, status, date)
         VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
 
+    // clearing prefetch cache of invoices to fetch again from server
+    revalidatePath('/dashboard/invoices');
+
+    // redirect again to invoice page
+    redirect('/dashboard/invoices');
     // console.log(rawFormData);
 
 }
+
+export const updateInvoice = async (id: string, formData: FormData) => {
+    const { customerId, amount, status } = UpdateInvoice.parse({
+        customerId: formData.get('customerId'),
+        amount: formData.get('amount'),
+        status: formData.get('status'),
+    });
+
+    const amountInCents = amount * 100;
+
+    await sql`
+     UPDATE invoices
+     SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
+     WHERE id = ${id}
+    `;
+
+    revalidatePath('/dashboard/invoices');
+    redirect('/dashboard/invoices');
+};
+
+
+// deleteing the invoice 
+export const deleteInvoice = async (id: string) => {
+    await sql`DELETE FROM invoices WHERE id = ${id}`;
+
+    revalidatePath('/dashboard/invoices');
+}
+
